@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Model Generator</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f0f1a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    header h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #818cf8, #c084fc, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p {
+      margin-top: 0.5rem;
+      color: #94a3b8;
+      font-size: 1rem;
+    }
+
+    /* ── Card ─────────────────────────────────────────────────────── */
+    .card {
+      background: #1e1e2e;
+      border: 1px solid #2d2d3d;
+      border-radius: 1.25rem;
+      padding: 2rem;
+      width: 100%;
+      max-width: 620px;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    /* ── Drop zone ────────────────────────────────────────────────── */
+    #drop-zone {
+      border: 2px dashed #3d3d5c;
+      border-radius: 0.875rem;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: #818cf8;
+      background: rgba(129, 140, 248, 0.05);
+    }
+    #drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    #drop-zone .icon {
+      font-size: 3rem;
+      margin-bottom: 0.75rem;
+    }
+    #drop-zone p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    #drop-zone strong { color: #818cf8; }
+
+    /* ── Preview ──────────────────────────────────────────────────── */
+    #preview-wrap {
+      display: none;
+      margin-top: 1.25rem;
+      text-align: center;
+    }
+    #preview-wrap img {
+      max-height: 220px;
+      border-radius: 0.75rem;
+      border: 1px solid #2d2d3d;
+      object-fit: cover;
+    }
+    #preview-name {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+
+    /* ── Options ──────────────────────────────────────────────────── */
+    .options {
+      margin-top: 1.25rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .field {
+      flex: 1;
+      min-width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .field label {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .field select, .field input[type="text"] {
+      background: #13131f;
+      border: 1px solid #2d2d3d;
+      border-radius: 0.5rem;
+      color: #e2e8f0;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field select:focus, .field input[type="text"]:focus {
+      border-color: #818cf8;
+    }
+
+    /* ── Generate button ──────────────────────────────────────────── */
+    #generate-btn {
+      margin-top: 1.5rem;
+      width: 100%;
+      padding: 0.85rem;
+      border: none;
+      border-radius: 0.75rem;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    #generate-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    #generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Progress ─────────────────────────────────────────────────── */
+    #progress-section {
+      display: none;
+      margin-top: 1.5rem;
+    }
+    #progress-label {
+      font-size: 0.9rem;
+      color: #94a3b8;
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+    }
+    #progress-bar-wrap {
+      background: #13131f;
+      border-radius: 9999px;
+      height: 10px;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #6366f1, #c084fc);
+      border-radius: 9999px;
+      transition: width 0.5s ease;
+    }
+    #status-msg {
+      margin-top: 0.75rem;
+      font-size: 0.875rem;
+      color: #64748b;
+      text-align: center;
+    }
+
+    /* ── Result / download ────────────────────────────────────────── */
+    #result-section {
+      display: none;
+      margin-top: 1.5rem;
+      text-align: center;
+    }
+    #result-section .success-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+    #result-section h3 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      color: #a5f3fc;
+    }
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.75rem;
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.95rem;
+      text-decoration: none;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .download-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .download-btn svg { width: 1.1rem; height: 1.1rem; }
+
+    /* ── Error ────────────────────────────────────────────────────── */
+    #error-section {
+      display: none;
+      margin-top: 1rem;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 0.75rem;
+      padding: 0.875rem 1rem;
+      color: #fca5a5;
+      font-size: 0.9rem;
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    footer {
+      margin-top: 2.5rem;
+      color: #334155;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🧊 3D Model Generator</h1>
+    <p>Upload an image and get a downloadable 3D model (GLB) in seconds.</p>
+  </header>
+
+  <div class="card">
+
+    <!-- Drop zone -->
+    <div id="drop-zone">
+      <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.webp" />
+      <div class="icon">🖼️</div>
+      <p><strong>Click to browse</strong> or drag &amp; drop your image here</p>
+      <p style="margin-top:0.4rem;font-size:0.8rem;">PNG · JPG · JPEG · WEBP &nbsp;|&nbsp; Max 20 MB</p>
+    </div>
+
+    <!-- Preview -->
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt="Preview" />
+      <p id="preview-name"></p>
+    </div>
+
+    <!-- Options -->
+    <div class="options">
+      <div class="field">
+        <label for="art-style">Art style</label>
+        <select id="art-style">
+          <option value="realistic">Realistic</option>
+          <option value="sculpture">Sculpture</option>
+          <option value="pbr">PBR</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="negative-prompt">Negative prompt</label>
+        <input type="text" id="negative-prompt"
+               value="low quality, low resolution, low poly, ugly"
+               placeholder="Things to avoid…" />
+      </div>
+    </div>
+
+    <!-- Generate -->
+    <button id="generate-btn" disabled>Generate 3D Model</button>
+
+    <!-- Progress -->
+    <div id="progress-section">
+      <div id="progress-label">
+        <span>Generating…</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div id="progress-bar-wrap">
+        <div id="progress-bar"></div>
+      </div>
+      <p id="status-msg">Submitting task…</p>
+    </div>
+
+    <!-- Result -->
+    <div id="result-section">
+      <div class="success-icon">✅</div>
+      <h3>Your 3D model is ready!</h3>
+      <a id="download-link" class="download-btn" href="#" download="model.glb">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Install / Download GLB
+      </a>
+    </div>
+
+    <!-- Error -->
+    <div id="error-section"></div>
+
+  </div>
+
+  <footer>Powered by <a href="https://www.meshy.ai/" target="_blank" style="color:#4f46e5;">Meshy.ai</a></footer>
+
+  <script>
+    // ── DOM refs ────────────────────────────────────────────────────
+    const dropZone       = document.getElementById('drop-zone');
+    const fileInput      = document.getElementById('file-input');
+    const previewWrap    = document.getElementById('preview-wrap');
+    const previewImg     = document.getElementById('preview-img');
+    const previewName    = document.getElementById('preview-name');
+    const generateBtn    = document.getElementById('generate-btn');
+    const progressSec    = document.getElementById('progress-section');
+    const progressBar    = document.getElementById('progress-bar');
+    const progressPct    = document.getElementById('progress-pct');
+    const statusMsg      = document.getElementById('status-msg');
+    const resultSec      = document.getElementById('result-section');
+    const downloadLink   = document.getElementById('download-link');
+    const errorSec       = document.getElementById('error-section');
+    const artStyleSel    = document.getElementById('art-style');
+    const negativePrompt = document.getElementById('negative-prompt');
+
+    let selectedFile = null;
+    let pollTimer    = null;
+
+    // ── Drag & drop ──────────────────────────────────────────────────
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewImg.src   = e.target.result;
+        previewName.textContent = file.name;
+        previewWrap.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+      generateBtn.disabled = false;
+      hideError();
+      resultSec.style.display = 'none';
+      progressSec.style.display = 'none';
+    }
+
+    // ── Generate ─────────────────────────────────────────────────────
+    generateBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      hideError();
+      resultSec.style.display   = 'none';
+      progressSec.style.display = 'block';
+      generateBtn.disabled      = true;
+      setProgress(0, 'Uploading image…');
+
+      const formData = new FormData();
+      formData.append('image', selectedFile);
+      formData.append('art_style', artStyleSel.value);
+      formData.append('negative_prompt', negativePrompt.value);
+
+      let taskId;
+      try {
+        const resp = await fetch('/generate', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Server error');
+        taskId = data.task_id;
+      } catch (err) {
+        showError(err.message);
+        resetUI();
+        return;
+      }
+
+      setProgress(5, 'Task submitted — waiting for AI to generate your model…');
+      pollStatus(taskId);
+    });
+
+    // ── Polling ──────────────────────────────────────────────────────
+    function pollStatus(taskId) {
+      pollTimer = setTimeout(async () => {
+        try {
+          const resp = await fetch(`/status/${taskId}`);
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error || 'Status check failed');
+
+          const pct    = data.progress || 0;
+          const state  = (data.status || '').toUpperCase();
+
+          if (state === 'SUCCEEDED') {
+            setProgress(100, 'Done!');
+            resultSec.style.display = 'block';
+            downloadLink.href = `/download/${taskId}`;
+            progressSec.style.display = 'none';
+            generateBtn.disabled = false;
+            return;
+          }
+
+          if (state === 'FAILED' || state === 'EXPIRED') {
+            throw new Error(`Task ${state.toLowerCase()}.`);
+          }
+
+          setProgress(pct, statusLabel(state, pct));
+          pollStatus(taskId); // continue polling
+        } catch (err) {
+          showError(err.message);
+          resetUI();
+        }
+      }, 3000);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────
+    function setProgress(pct, msg) {
+      progressBar.style.width  = `${pct}%`;
+      progressPct.textContent  = `${pct}%`;
+      statusMsg.textContent    = msg;
+    }
+
+    function statusLabel(state, pct) {
+      if (state === 'PENDING')    return 'Queued — waiting for a worker…';
+      if (state === 'IN_PROGRESS') return `Generating 3D mesh… ${pct}%`;
+      return `Status: ${state} (${pct}%)`;
+    }
+
+    function showError(msg) {
+      errorSec.textContent    = `⚠️  ${msg}`;
+      errorSec.style.display  = 'block';
+    }
+
+    function hideError() {
+      errorSec.textContent   = '';
+      errorSec.style.display = 'none';
+    }
+
+    function resetUI() {
+      progressSec.style.display = 'none';
+      generateBtn.disabled      = false;
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    }
+  </script>
+
+</body>
+</html>
