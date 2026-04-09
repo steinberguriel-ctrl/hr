@@ -6,7 +6,7 @@ polls for completion, and serves the resulting GLB file for download.
 """
 
 import os
-import time
+import re
 import uuid
 import logging
 import requests
@@ -24,6 +24,9 @@ load_dotenv()
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 20 MB
+
+# Regex for safe Meshy task IDs (alphanumeric + hyphens only)
+_TASK_ID_RE = re.compile(r"^[a-zA-Z0-9\-]{1,128}$")
 
 UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "uploads")
 OUTPUT_FOLDER = os.getenv("OUTPUT_FOLDER", "outputs")
@@ -93,7 +96,9 @@ def generate():
     import base64
     with open(local_path, "rb") as f:
         raw = f.read()
-    mime = "image/jpeg" if local_path.lower().endswith((".jpg", ".jpeg")) else "image/png"
+    ext = local_path.lower().rsplit(".", 1)[-1]
+    mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+    mime = mime_map.get(ext, "image/png")
     image_data_url = f"data:{mime};base64,{base64.b64encode(raw).decode()}"
 
     art_style = request.form.get("art_style", "realistic")
@@ -117,7 +122,7 @@ def generate():
         resp.raise_for_status()
     except requests.RequestException as exc:
         logger.error("Meshy API error: %s", exc)
-        return jsonify({"error": f"Failed to submit task to Meshy API: {exc}"}), 502
+        return jsonify({"error": "Failed to submit task to Meshy API. Check server logs."}), 502
 
     task_id = resp.json().get("result")
     if not task_id:
@@ -136,6 +141,9 @@ def status(task_id: str):
     if not MESHY_API_KEY:
         return jsonify({"error": "MESHY_API_KEY is not configured on the server."}), 500
 
+    if not _TASK_ID_RE.match(task_id):
+        return jsonify({"error": "Invalid task ID."}), 400
+
     try:
         resp = requests.get(
             f"{MESHY_BASE_URL}/image-to-3d/{task_id}",
@@ -144,7 +152,8 @@ def status(task_id: str):
         )
         resp.raise_for_status()
     except requests.RequestException as exc:
-        return jsonify({"error": str(exc)}), 502
+        logger.error("Meshy status error: %s", exc)
+        return jsonify({"error": "Failed to retrieve task status. Check server logs."}), 502
 
     data = resp.json()
     result = {
@@ -169,6 +178,9 @@ def download(task_id: str):
     if not MESHY_API_KEY:
         return jsonify({"error": "MESHY_API_KEY is not configured on the server."}), 500
 
+    if not _TASK_ID_RE.match(task_id):
+        return jsonify({"error": "Invalid task ID."}), 400
+
     cached = os.path.join(OUTPUT_FOLDER, f"{task_id}.glb")
     if not os.path.exists(cached):
         # Fetch task details to get the GLB URL
@@ -180,7 +192,8 @@ def download(task_id: str):
             )
             resp.raise_for_status()
         except requests.RequestException as exc:
-            return jsonify({"error": str(exc)}), 502
+            logger.error("Meshy download metadata error: %s", exc)
+            return jsonify({"error": "Failed to retrieve model metadata. Check server logs."}), 502
 
         glb_url = resp.json().get("model_urls", {}).get("glb")
         if not glb_url:
@@ -191,7 +204,8 @@ def download(task_id: str):
             glb_resp = requests.get(glb_url, timeout=120, stream=True)
             glb_resp.raise_for_status()
         except requests.RequestException as exc:
-            return jsonify({"error": f"Failed to fetch GLB: {exc}"}), 502
+            logger.error("GLB fetch error: %s", exc)
+            return jsonify({"error": "Failed to fetch GLB file. Check server logs."}), 502
 
         with open(cached, "wb") as f:
             for chunk in glb_resp.iter_content(chunk_size=8192):
@@ -210,4 +224,5 @@ def download(task_id: str):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug, port=5000)
