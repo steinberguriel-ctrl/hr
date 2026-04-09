@@ -8,6 +8,7 @@ polls for completion, and serves the resulting GLB file for download.
 import os
 import re
 import uuid
+import base64
 import logging
 import requests
 
@@ -93,7 +94,6 @@ def generate():
     file.save(local_path)
 
     # Read image as base64 data-URL (Meshy supports image_url as a data-URL)
-    import base64
     with open(local_path, "rb") as f:
         raw = f.read()
     ext = local_path.lower().rsplit(".", 1)[-1]
@@ -181,7 +181,10 @@ def download(task_id: str):
     if not _TASK_ID_RE.match(task_id):
         return jsonify({"error": "Invalid task ID."}), 400
 
-    cached = os.path.join(OUTPUT_FOLDER, f"{task_id}.glb")
+    output_dir = os.path.realpath(OUTPUT_FOLDER)
+    cached = os.path.realpath(os.path.join(OUTPUT_FOLDER, f"{task_id}.glb"))
+    if not cached.startswith(output_dir + os.sep):
+        return jsonify({"error": "Invalid task ID."}), 400
     if not os.path.exists(cached):
         # Fetch task details to get the GLB URL
         try:
